@@ -48,13 +48,13 @@ func TestGroups(t *testing.T) {
 	t.Run("Get group that exists", func(t *testing.T) {
 		g, ok := i.GetGroup("testgroup001")
 		if g == nil && ok != false {
-			t.Errorf("Expected to get back group and not ok")
+			t.Errorf("Expected to get back group and ok")
 		}
 	})
 	t.Run("Get group that does not exist", func(t *testing.T) {
 		g, ok := i.GetGroup("testgroup002")
 		if g != nil && ok == false {
-			t.Errorf("Expected to get back nil and ok")
+			t.Errorf("Expected to get back nil and not ok")
 		}
 	})
 	// TODO
