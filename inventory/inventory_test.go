@@ -1,6 +1,11 @@
 package inventory
 
-import "testing"
+import (
+	"encoding/json"
+	"fmt"
+	"reflect"
+	"testing"
+)
 
 func TestHosts(t *testing.T) {
 	i := NewInventory()
@@ -57,9 +62,73 @@ func TestGroups(t *testing.T) {
 			t.Errorf("Expected to get back nil and not ok")
 		}
 	})
-	// TODO
-	// t.Run("Test adding host to group", func(t *testing.T) {
-	// 	g, _ := i.GetGroup("testgroup001")
-	// 	g.AddHost()
-	// })
+	t.Run("Add a host that hasn't been added via inventory add host yet", func(t *testing.T) {
+		g, _ := i.GetGroup("testgroup001")
+		g.AddHost("comp01")
+		h, _ := i.GetHost("comp01")
+		if h == nil {
+			t.Errorf("Could not add a new host via group")
+		}
+	})
+
+}
+func TestInventory(t *testing.T) {
+	i := NewInventory()
+	h, _ := i.AddHost("comp01")
+	h1, _ := i.AddHost("comp02")
+	h.AddVariable("foo", "bar")
+	h1.AddVariable("baz", "buzz")
+	g, _ := i.AddGroup("group01")
+	g.AddVariable("gvar", "gbaz")
+	g.AddHost("comp01")
+
+	expected := `
+	{
+		"_meta": {
+			"hostvars": {
+				"comp01": {
+					"foo": "bar"
+				},
+				"comp02": {
+					"baz": "buzz"
+				}
+			}
+		},
+		"all": {
+			"hosts": [
+				"comp01",
+				"comp02"
+			],
+			"children": [
+				"ungrouped",
+				"group01"
+			]
+		},
+		"group01": {
+			"vars": {
+				"gvar": "gbaz"
+			},
+			"hosts": [
+				"comp01"
+			]
+		},
+		"ungrouped": {
+			"hosts": [
+				"comp02",
+				"comp02"
+			]
+		}
+	}
+`
+	actual, _ := json.Marshal(i)
+
+	var expectedObj interface{}
+	var actualObj interface{}
+	json.Unmarshal([]byte(expected), &expectedObj)
+	json.Unmarshal(actual, &actualObj)
+	fmt.Printf("Actual: %v", string(actual))
+
+	if !reflect.DeepEqual(expectedObj, actualObj) {
+		t.Errorf("Expected: %v, not equal to actual %v", expectedObj, actualObj)
+	}
 }
