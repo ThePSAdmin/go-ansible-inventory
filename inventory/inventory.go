@@ -3,10 +3,7 @@ package inventory
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"sync"
-
-	"github.com/spf13/pflag"
 )
 
 type Inventory interface {
@@ -14,12 +11,12 @@ type Inventory interface {
 	GetHost(hostname string) (Host, bool)
 	AddGroup(groupname string) (Group, error)
 	GetGroup(groupname string) (Group, bool)
-	Parse() error
-	WriteOutput(h string, l bool) error
+	MarshalJSON() ([]byte, error)
 }
 
 type Host interface {
 	AddVariable(k string, v string)
+	MarshalJSON() ([]byte, error)
 }
 
 type Group interface {
@@ -36,22 +33,22 @@ type inventory struct {
 
 type host struct {
 	mu        sync.Mutex
-	variables map[string]string `json:"vars"`
+	variables map[string]string
 }
 
 type group struct {
-	mu        sync.Mutex        `json:"-"`
-	hosts     []string          `json:"hosts"`
-	variables map[string]string `json:"vars"`
-	children  []string          `json:"children"`
-	inventory *inventory        `json:"-"`
+	mu        sync.Mutex
+	hosts     []string
+	variables map[string]string
+	children  []string
+	inventory *inventory
 }
 
 func (g *group) MarshalJSON() ([]byte, error) {
 	j, err := json.Marshal(struct {
-		Vars      map[string]string `json:"vars,omitempty""`
-		Hosts     []string          `json:"hosts,omitempty"`
-		Children  []string          `json:"children,omitempty"`
+		Vars     map[string]string `json:"vars,omitempty"`
+		Hosts    []string          `json:"hosts,omitempty"`
+		Children []string          `json:"children,omitempty"`
 	}{
 		g.variables,
 		g.hosts,
@@ -64,17 +61,35 @@ func (g *group) MarshalJSON() ([]byte, error) {
 }
 
 func (h *host) MarshalJSON() ([]byte, error) {
-	j, err := json.Marshal(struct {
-		Vars map[string]string `json:"vars,omitempty""`
-	}{
-		h.variables,
-	})
+	j, err := json.Marshal(h.variables)
 	if err != nil {
 		return nil, err
 	}
 	return j, nil
 }
 
+func (i *inventory) MarshalJSON() ([]byte, error) {
+	var ret = map[string]interface{}{
+		"_meta": map[string]map[string]*host{
+			"hostvars": i.Hosts,
+		},
+	}
+
+	for n, g := range i.Groups {
+		ret[n] = g
+	}
+
+	buf, err := json.Marshal(ret)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf, nil
+}
+
+// NewInventory creates an inventory object that is used for adding groups
+// and hosts. Once all inventory has been added, the json object that ansible expects
+// can be created by using json.Marshal.
 func NewInventory() Inventory {
 	return &inventory{
 		Hosts:  make(map[string]*host),
@@ -82,6 +97,8 @@ func NewInventory() Inventory {
 	}
 }
 
+// AddHost adds a host to the inventory, if the host already exists, it returns
+// an error.
 func (i *inventory) AddHost(hostname string) (Host, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -95,6 +112,8 @@ func (i *inventory) AddHost(hostname string) (Host, error) {
 	return i.Hosts[hostname], nil
 }
 
+// GetHost retrieves an a host already added to the inventory, this
+// would be needed if any variables needed to be added to the host for example.
 func (i *inventory) GetHost(hostname string) (Host, bool) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -102,7 +121,6 @@ func (i *inventory) GetHost(hostname string) (Host, bool) {
 		return h, true
 	}
 	return nil, false
-
 }
 
 func (i *inventory) AddGroup(groupname string) (Group, error) {
@@ -113,6 +131,9 @@ func (i *inventory) AddGroup(groupname string) (Group, error) {
 		return nil, err
 	}
 	i.Groups[groupname] = &group{inventory: i, variables: make(map[string]string)}
+	allGroup := i.Groups["all"].children
+	allGroupChildren := append(allGroup, groupname)
+	i.Groups["all"].children = allGroupChildren
 	return i.Groups[groupname], nil
 }
 
@@ -125,52 +146,6 @@ func (i *inventory) GetGroup(groupname string) (Group, bool) {
 	return nil, false
 }
 
-func (i *inventory) Parse() error {
-	list := pflag.Bool("list", false, "Lists ansible inventory")
-	h := pflag.String("h", "", "Gets variables for individual h")
-	pflag.Parse()
-
-	err := i.WriteOutput(*h, *list)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (i *inventory) WriteOutput(h string, list bool) error {
-	if !list && h == "" {
-		return fmt.Errorf("You must specify either --list or --h")
-	}
-
-	if list && h != "" {
-		return fmt.Errorf("You must specify only one of either --list or --h")
-	}
-
-	if list {
-		ret := make(map[string]json.RawMessage)
-
-		hostvars := map[string]map[string]*host{
-			"hostvars": i.Hosts,
-		}
-		res, err := json.Marshal(hostvars)
-		if err != nil {
-			panic(err)
-		}
-		ret["_meta"] = res
-
-		for n, g := range i.Groups {
-			ret[n], _ = json.Marshal(g)
-		}
-		buf, err := json.Marshal(ret)
-		if err != nil {
-			panic(err)
-		}
-		os.Stdout.Write(buf)
-		return nil
-	}
-	return nil
-}
-
 func (h *host) AddVariable(key string, val string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -180,8 +155,15 @@ func (h *host) AddVariable(key string, val string) {
 func (g *group) AddHost(hostname string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	g.inventory.AddHost(hostname)
 	g.inventory.Groups["ungrouped"].hosts = removeS(g.inventory.Groups["ungrouped"].hosts, hostname)
 	g.hosts = append(g.hosts, hostname)
+}
+
+func (g *group) AddVariable(key string, val string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.variables[key] = val
 }
 
 func removeS(s []string, item string) []string {
@@ -199,10 +181,4 @@ func removeS(s []string, item string) []string {
 
 func (g *group) Hosts() []string {
 	return g.hosts
-}
-
-func (g *group) AddVariable(key string, val string) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.variables[key] = val
 }
