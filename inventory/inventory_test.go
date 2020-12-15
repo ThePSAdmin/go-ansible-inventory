@@ -126,9 +126,9 @@ func TestInventory(t *testing.T) {
 	var actualObj interface{}
 	json.Unmarshal([]byte(expected), &expectedObj)
 	json.Unmarshal(actual, &actualObj)
-	fmt.Printf("Actual: %v", string(actual))
 
 	if !reflect.DeepEqual(expectedObj, actualObj) {
+		fmt.Printf("Actual: %v", string(actual))
 		t.Errorf("Expected: %v, not equal to actual %v", expectedObj, actualObj)
 	}
 }
