@@ -3,7 +3,7 @@ A go package for creating ansible inventories
 
 ### Example
 
-```
+```go
 package main
 
 import (
