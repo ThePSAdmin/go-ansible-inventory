@@ -44,8 +44,7 @@ func main() {
 	}
 
 	if *host != "" {
-		outHost, ok := i.GetHost(*host)
-		if ok {
+		if outHost, ok := i.GetHost(*host); ok {
 			j, _ := json.Marshal(outHost)
 			os.Stdout.Write(j)
 		}
