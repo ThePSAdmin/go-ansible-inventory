@@ -107,7 +107,7 @@ func (i *inventory) AddHost(hostname string) (Host, error) {
 		return nil, err
 	}
 	i.Groups["all"].hosts = append(i.Groups["all"].hosts, hostname)
-	i.Groups["ungrouped"].hosts = append(i.Groups["all"].hosts, hostname)
+	i.Groups["ungrouped"].hosts = append(i.Groups["ungrouped"].hosts, hostname)
 	i.Hosts[hostname] = &host{variables: make(map[string]string)}
 	return i.Hosts[hostname], nil
 }

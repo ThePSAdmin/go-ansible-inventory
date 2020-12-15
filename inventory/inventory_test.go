@@ -114,7 +114,6 @@ func TestInventory(t *testing.T) {
 		},
 		"ungrouped": {
 			"hosts": [
-				"comp02",
 				"comp02"
 			]
 		}
