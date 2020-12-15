@@ -1,0 +1,8 @@
+[all]
+comp02 baz=buzz
+
+[group01]
+comp01 foo=bar
+
+[group01:vars]
+gvar=gbaz
